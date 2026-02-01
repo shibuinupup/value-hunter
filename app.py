@@ -10,7 +10,7 @@ from flask import Flask, render_template, request, Response, redirect, url_for
 from dotenv import load_dotenv
 
 load_dotenv()
-
+app = Flask(__name__)
 # --- ENV ---
 COVALENT_API_KEY = os.getenv("COVALENT_API_KEY")
 ZEROX_API_KEY = os.getenv("ZEROX_API_KEY")
