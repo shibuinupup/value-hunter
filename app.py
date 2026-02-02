@@ -124,8 +124,8 @@ def is_eth_address(s: str) -> bool:
 # =========================
 # APIs
 # =========================
-ZEROX_PRICE_URL = "https://api.0x.org/swap/allowance-holder/price"
-ZEROX_HEADERS = {"0x-api-key": ZEROX_API_KEY, "0x-version": "v2"}
+ZEROX_PRICE_URL = "https://api.0x.org/swap/v1/price"
+ZEROX_HEADERS = {"0x-api-key": ZEROX_API_KEY}
 
 def covalent_tokens(chain_id: int, wallet: str):
     url = f"https://api.covalenthq.com/v1/{chain_id}/address/{wallet}/balances_v2/"
@@ -141,11 +141,10 @@ def covalent_tokens(chain_id: int, wallet: str):
 
 def zerox_price(chain_id: int, wallet: str, sell_token: str, sell_amount_raw: int, buy_token_addr: str):
     params = {
-        "chainId": str(chain_id),
-        "sellToken": sell_token,
-        "buyToken": buy_token_addr,
-        "sellAmount": str(sell_amount_raw),
-        "taker": wallet,
+    "chainId": str(chain_id),
+    "sellToken": sell_token,
+    "buyToken": buy_token_addr,
+    "sellAmount": str(sell_amount_raw),
     }
     try:
         r = session.get(ZEROX_PRICE_URL, params=params, headers=ZEROX_HEADERS, timeout=18)
