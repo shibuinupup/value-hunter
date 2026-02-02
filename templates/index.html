@@ -270,7 +270,6 @@
           <form method="POST" action="/start">
             <textarea name="wallets" placeholder="0x... (one per line)">{{ wallets_text }}</textarea>
 
-            
             <!-- CHAIN SELECT -->
             <div style="display:flex; gap:10px; align-items:center; margin-top:10px;">
               <div class="pill">chain</div>
@@ -281,11 +280,11 @@
               </select>
             </div>
 
-<!-- BUY MODE SELECT (unchanged functionality) -->
+            <!-- BUY MODE SELECT -->
             <div style="display:flex; gap:10px; align-items:center; margin-top:10px;">
               <div class="pill">buy</div>
               <select name="buy_mode" id="buy_mode" class="buyMode">
-                <option value="ETH" {{ "selected" if buy_mode == "ETH" else "" }}>ETH (WETH route)</option>
+                <option value="ETH" {{ "selected" if buy_mode == "ETH" else "" }}>ETH (wrapped route)</option>
                 <option value="USDC" {{ "selected" if buy_mode == "USDC" else "" }}>USDC</option>
               </select>
             </div>
@@ -560,8 +559,10 @@
 
     es.addEventListener("ping", () => {});
     es.onerror = () => {
+      // Some platforms/proxies trigger onerror on clean close; ignore if already done.
+      if (scanStatus.textContent === "done") return;
       scanStatus.textContent = "error";
-      addLine("DUST_ONLY", "Event stream error (refresh page).");
+      addLine("READY", "Event stream error (refresh page).");
     };
   } else {
     feed.innerHTML = `<div class="tiny">Paste wallet addresses and press Scan.</div>`;

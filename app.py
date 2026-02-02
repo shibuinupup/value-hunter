@@ -27,6 +27,10 @@ DUST_MIN_USDC = float(os.getenv("DUST_MIN_USDC", "0.01"))
 # Used when buy_mode != USDC (UI calls this "ETH" mode). This is in "wrapped native" units.
 MIN_WRAPPED_NATIVE = float(os.getenv("MIN_WRAPPED_NATIVE", "0.0002"))
 
+# Light throttling to avoid 429s when scanning huge batches
+WALLET_THROTTLE_S = float(os.getenv("WALLET_THROTTLE_S", "0.15"))
+TOKEN_THROTTLE_S = float(os.getenv("TOKEN_THROTTLE_S", "0.04"))
+
 if not all([COVALENT_API_KEY, ZEROX_API_KEY]):
     raise SystemExit("Missing env vars. Need: COVALENT_API_KEY, ZEROX_API_KEY")
 
@@ -158,7 +162,6 @@ def zerox_price(chain_id: int, wallet: str, sell_token: str, sell_amount_raw: in
         return None
     return j
 
-
 def amount_from_buy_amount(buy_amount_raw: str, buy_decimals: int) -> float:
     try:
         return int(buy_amount_raw) / (10 ** int(buy_decimals))
@@ -180,11 +183,28 @@ def thresholds_for_mode(buy_mode: str):
     # wrapped native
     return MIN_WRAPPED_NATIVE, 0.0  # dust threshold for wrapped native not used here
 
+def compute_micro_sell_amount(balance_raw: int, token_decimals: int) -> int:
+    """
+    Avoid 'sellAmount=1' (1 wei) which often returns buyAmount=0 and looks like NO_ROUTE.
+    Pick ~0.000001 token (or smaller if decimals < 6), capped to balance.
+    """
+    try:
+        d = int(token_decimals)
+    except Exception:
+        d = 18
+
+    # 1e-6 token in raw units => 10^(decimals-6)
+    micro_raw = 10 ** max(d - 6, 0)
+    micro_raw = max(1, micro_raw)
+    micro_raw = min(micro_raw, max(1, int(balance_raw)))
+    return int(micro_raw)
+
 def evaluate_token_fast(
     chain_id: int,
     wallet: str,
     token_addr: str,
     balance_raw: int,
+    token_decimals: int,
     buy_mode: str,
     buy_token_addr: str,
     buy_decimals: int,
@@ -192,7 +212,7 @@ def evaluate_token_fast(
     """
     FAST heuristic:
       - try 1%, 0.1%, 0.01% of balance
-      - if none, micro=1 to detect traps
+      - if none, micro amount (~1e-6 token) to detect traps / maxTx
     Returns dict with status + out_est + link/note.
     Statuses:
       - PARTIAL: can get >= min_out
@@ -212,6 +232,7 @@ def evaluate_token_fast(
 
     min_out, dust_out = thresholds_for_mode(buy_mode)
 
+    # 1) try fractions
     for amt in frac_amounts:
         q = zerox_price(chain_id, wallet, token_addr, amt, buy_token_addr)
         if not q:
@@ -228,7 +249,6 @@ def evaluate_token_fast(
                 "note": "",
             }
 
-        # If in USDC mode, keep track of dust routes too
         if buy_mode == "USDC" and out_amt >= dust_out and out_amt > 0:
             return {
                 "status": "DUST_ONLY",
@@ -238,8 +258,9 @@ def evaluate_token_fast(
                 "note": "Route exists but under MIN_USDC threshold.",
             }
 
-    # micro trap check
-    q1 = zerox_price(chain_id, wallet, token_addr, 1, buy_token_addr)
+    # 2) micro trap check (IMPORTANT: do not use 1 wei)
+    micro_raw = compute_micro_sell_amount(balance_raw, token_decimals)
+    q1 = zerox_price(chain_id, wallet, token_addr, micro_raw, buy_token_addr)
     if q1:
         out1 = amount_from_buy_amount(q1["buyAmount"], buy_decimals)
 
@@ -247,13 +268,13 @@ def evaluate_token_fast(
             return {
                 "status": "MICRO_ONLY",
                 "out_est": out1,
-                "sell_amount_raw": 1,
+                "sell_amount_raw": micro_raw,
                 "link": "",
                 "note": "Only micro amounts hit threshold (likely trap/maxTx/tax).",
             }
 
         if buy_mode == "USDC" and out1 >= dust_out and out1 > 0:
-            return {"status": "DUST_ONLY", "out_est": out1, "sell_amount_raw": 1, "link": "", "note": ""}
+            return {"status": "DUST_ONLY", "out_est": out1, "sell_amount_raw": micro_raw, "link": "", "note": ""}
 
     return {"status": "NO_ROUTE", "out_est": 0.0, "sell_amount_raw": None, "link": "", "note": ""}
 
@@ -339,6 +360,8 @@ def run_scan(job_id: str, wallets: list[str], buy_mode: str, chain_id: int):
             if not addr:
                 continue
 
+            token_decimals = int(t.get("contract_decimals", 18) or 18)
+
             # Skip stable + wrapped native by address, plus obvious native symbols
             if addr.lower() in skip_addrs:
                 continue
@@ -353,6 +376,7 @@ def run_scan(job_id: str, wallets: list[str], buy_mode: str, chain_id: int):
                 wallet=wallet,
                 token_addr=addr,
                 balance_raw=bal,
+                token_decimals=token_decimals,
                 buy_mode=buy_mode,
                 buy_token_addr=buy_token_addr,
                 buy_decimals=buy_decimals,
@@ -371,7 +395,6 @@ def run_scan(job_id: str, wallets: list[str], buy_mode: str, chain_id: int):
                 }
                 rows.append(row)
 
-            # Always push token_result so UI updates
             push(job_id, "token_result", {
                 "wallet": wallet,
                 "symbol": sym,
@@ -383,12 +406,13 @@ def run_scan(job_id: str, wallets: list[str], buy_mode: str, chain_id: int):
                 "note": verdict.get("note", "") or "",
             })
 
-            time.sleep(0.04)
+            time.sleep(TOKEN_THROTTLE_S)
 
         rows.sort(key=lambda x: x.get("out_est", 0), reverse=True)
         output.append({"wallet": wallet, "rows": rows, "scanned": scanned, "found": found})
 
         push(job_id, "wallet_done", {"wallet": wallet, "scanned": scanned, "found": found})
+        time.sleep(WALLET_THROTTLE_S)
 
     total_s = round(time.time() - start_ts, 2)
 
