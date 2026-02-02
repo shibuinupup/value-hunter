@@ -232,13 +232,13 @@
   <div class="wrap">
     <div class="top">
       <div class="title">
-        <h1>Value Hunter</h1>
+        <h1>Value Hunter <span class="tiny">— {{ chain_name }}</span></h1>
         <div class="meta">
           <span class="pill">chainId <span class="mono">{{ chain_id }}</span></span>
           <span class="pill">min <span class="mono">${{ min_usdc }}</span></span>
           <span class="pill">USDC <span class="mono">{{ usdc_addr }}</span></span>
-          {% if weth_addr %}
-            <span class="pill">WETH <span class="mono">{{ weth_addr }}</span></span>
+          {% if wrapped_addr %}
+            <span class="pill">{{ wrapped_symbol }} <span class="mono">{{ wrapped_addr }}</span></span>
           {% endif %}
           <span class="tiny">read-only • no signer • no approvals</span>
         </div>
@@ -270,7 +270,18 @@
           <form method="POST" action="/start">
             <textarea name="wallets" placeholder="0x... (one per line)">{{ wallets_text }}</textarea>
 
-            <!-- BUY MODE SELECT (unchanged functionality) -->
+            
+            <!-- CHAIN SELECT -->
+            <div style="display:flex; gap:10px; align-items:center; margin-top:10px;">
+              <div class="pill">chain</div>
+              <select name="chain_id" id="chain_id" class="buyMode">
+                {% for c in chain_options %}
+                  <option value="{{ c.id }}" {{ "selected" if c.id == chain_id else "" }}>{{ c.name }} ({{ c.id }})</option>
+                {% endfor %}
+              </select>
+            </div>
+
+<!-- BUY MODE SELECT (unchanged functionality) -->
             <div style="display:flex; gap:10px; align-items:center; margin-top:10px;">
               <div class="pill">buy</div>
               <select name="buy_mode" id="buy_mode" class="buyMode">
