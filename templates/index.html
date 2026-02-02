@@ -539,7 +539,7 @@
 
     es.addEventListener("wallet_error", (e) => {
       const d = JSON.parse(e.data || "{}");
-      addLine("DUST_ONLY", `Wallet error: ${d.msg}`);
+      addLine("READY", `Wallet error: ${d.msg}`);
     });
 
     es.addEventListener("done", (e) => {

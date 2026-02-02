@@ -130,6 +130,8 @@ def covalent_tokens(chain_id: int, wallet: str):
         params={"key": COVALENT_API_KEY, "no-nft-fetch": "true"},
         timeout=25,
     )
+    if r.status_code != 200:
+        print("Covalent error", r.status_code, "chain", chain_id, "wallet", wallet, "body", (r.text or "")[:250])
     r.raise_for_status()
     return r.json()["data"]["items"]
 
@@ -147,6 +149,7 @@ def zerox_price(chain_id: int, wallet: str, sell_token: str, sell_amount_raw: in
         return None
 
     if r.status_code != 200:
+        print("0x error", r.status_code, "chain", chain_id, "sell", sell_token, "buy", buy_token_addr, "body", (r.text or "")[:250])
         return None
 
     j = r.json()
@@ -154,6 +157,7 @@ def zerox_price(chain_id: int, wallet: str, sell_token: str, sell_amount_raw: in
     if not buy or buy == "0":
         return None
     return j
+
 
 def amount_from_buy_amount(buy_amount_raw: str, buy_decimals: int) -> float:
     try:
