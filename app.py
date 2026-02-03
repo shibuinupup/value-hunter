@@ -151,15 +151,15 @@ def zerox_price(chain_id: int, wallet: str, sell_token: str, sell_amount_raw: in
     except Exception:
         return None
 
-    if r.status_code != 200:
-        print("0x error", r.status_code, "chain", chain_id, "sell", sell_token, "buy", buy_token_addr, "body", (r.text or "")[:250])
+    # 0x uses 404 to mean: no route matched
+    if r.status_code == 404:
         return None
 
-    j = r.json()
-    buy = j.get("buyAmount")
-    if not buy or buy == "0":
+    if r.status_code != 200:
+        print("0x error", r.status_code, "chain", chain_id,
+          "sell", sell_token, "buy", buy_token_addr,
+          "body", (r.text or "")[:250])
         return None
-    return j
 
 def amount_from_buy_amount(buy_amount_raw: str, buy_decimals: int) -> float:
     try:
@@ -428,6 +428,25 @@ def run_scan(job_id: str, wallets: list[str], buy_mode: str, chain_id: int):
 # =========================
 # Routes
 # =========================
+@app.route("/debug_quote")
+def debug_quote():
+    # sanity test: WETH -> USDC must always route on Ethereum
+    chain_id = 1
+    weth = CHAIN_CONFIG[1]["wrapped"]
+    usdc = CHAIN_CONFIG[1]["stable"]
+
+    # sell 0.001 WETH
+    sell_amount = 10**15  # 0.001 * 1e18
+
+    q = zerox_price(
+        chain_id,
+        "0x0000000000000000000000000000000000000000",
+        weth["address"],
+        sell_amount,
+        usdc["address"],
+    )
+    return (q or {"error": "no_route"})
+
 @app.route("/", methods=["GET"])
 def home():
     chain_id = DEFAULT_CHAIN_ID if DEFAULT_CHAIN_ID in CHAIN_CONFIG else 1
