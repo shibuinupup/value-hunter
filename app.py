@@ -38,11 +38,21 @@ def zerox_price(chain_id,taker,sell_token,sell_amount_raw,buy_token_addr):
 
 @app.route("/debug_quote")
 def debug_quote():
-    weth=CHAIN_CONFIG[1]["wrapped"]
-    usdc=CHAIN_CONFIG[1]["stable"]
-    sell_amount=10**15
-    q=zerox_price(1,None,weth["address"],sell_amount,usdc["address"])
-    return (q or {"error":"no_route"})
+    chain_id = 1
+    weth = CHAIN_CONFIG[1]["wrapped"]
+    usdc = CHAIN_CONFIG[1]["stable"]
+
+    taker = os.getenv("DEBUG_TAKER")  # must be non-zero address
+    sell_amount = 10**18  # 1.0 WETH (testaa isommalla)
+
+    q = zerox_price(
+        chain_id,
+        taker,
+        weth["address"],
+        sell_amount,
+        usdc["address"],
+    )
+    return (q or {"error": "no_route"})
 
 if __name__=="__main__":
     app.run(host="0.0.0.0",port=int(os.getenv("PORT","8000")))
